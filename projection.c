@@ -14,7 +14,7 @@
 /* Modify these */
 #define lat_0 10*ratio
 #define lon_0 0*ratio
-#define nb_lon 10
+#define nb_lon 20
 #define nb_lat 10
 
 #define radius 10
@@ -64,6 +64,7 @@ void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr)
     res1 = map_to_orthographic(&x1, &y1, lat0 + i*dlat, lon0 + i*dlon);
     res2 = map_to_orthographic(&x2, &y2, lat0 + (i+1)*dlat, lon0 + (i+1)*dlon);
 
+    /* No need for that anymore */
     if (res1 > 0 && res2 > 0) {
       /* Beware, y=0 is top of the figure, so we must revert */
       if (fill_cell) {
@@ -80,32 +81,39 @@ void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr)
   }
 }
 
+/* Output in degree */
 void visible_lon_extrema(float* maxlon1, float* maxlon2, float lat)
 {
   /* Lat is in degree */
   *maxlon1 = -sin(lat_0)*sin(lat*ratio)/(cos(lat_0)*cos(lat*ratio));
   *maxlon1 = (acos(*maxlon1) + lon_0)*180./PI;
-  *maxlon2 = 360 - *maxlon1;
+  *maxlon2 = 360 - *maxlon1 + lon_0*180./PI;
+
 }
 
 void adapt_lon(float* first_lon, float* last_lon, float lat) {
-  float max_lon1, max_lon2;
+  float min_lon, max_lon;
   int x;
 
   
-  visible_lon_extrema(&max_lon1, &max_lon2, lat);
-  if (*first_lon < max_lon1 && *last_lon < max_lon1) 
-    x=0;
-  else if (*first_lon < max_lon1 && *last_lon > max_lon1) 
-    *last_lon = max_lon1;
-  else if (*first_lon < max_lon2 && *last_lon < max_lon2)
-  {
-    *first_lon = POINT_UNDEFINED;
-    *last_lon = POINT_UNDEFINED;
-    return;
+  visible_lon_extrema(&min_lon, &max_lon, lat);
+  //printf("visible extr %f %f %f \n", max_lon1, max_lon2, lat);
+ 
+  /* Last point inside invisible zone */
+  if (*last_lon > min_lon && *last_lon < max_lon ){
+    /* All of the arc is invisible */
+    if (*first_lon > min_lon && *first_lon < max_lon ){
+      *first_lon = POINT_UNDEFINED;
+      *last_lon = POINT_UNDEFINED;
+      return;
+    }
+    /* Otherwise, only the end */
+    *last_lon = min_lon;
   }
-  else if (*first_lon < max_lon2 && *last_lon > max_lon2)
-    *first_lon = max_lon2;
+  /* First point inside invisible zone : last must be outside here*/
+  else if (*first_lon > min_lon && *first_lon < max_lon ){
+    *first_lon = max_lon;
+  }
 }
 
 /* (lat, lon) is upper left corner and in degree */
@@ -124,18 +132,9 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   first_lon2 = lon;
   last_lon2 = lon+dlon;
   adapt_lon(&first_lon2, &last_lon2, lat - dlat);
-
-//  if (first_lon != POINT_UNDEFINED && last_lon != POINT_UNDEFINED) 
-//    draw_arc(lat, first_lon, lat, last_lon, cr);
-//
-//  if (last_lon != POINT_UNDEFINED && last_lon2 != POINT_UNDEFINED) 
-//    draw_arc(lat, last_lon, lat - dlat, last_lon2, cr);
-//
-//  if (last_lon2 != POINT_UNDEFINED && first_lon2 != POINT_UNDEFINED) 
-//    draw_arc(lat - dlat, last_lon2, lat - dlat, first_lon2, cr);
-//
-//  if (first_lon2 != POINT_UNDEFINED && first_lon != POINT_UNDEFINED) 
-//    draw_arc(lat - dlat, first_lon2, lat, first_lon, cr);
+  /*printf("lat %f %f %f \n", lat, lon, lon+dlon);
+  printf("extr %f %f %f %f \n", first_lon, last_lon, first_lon2, last_lon2);
+  */
 
   if (first_lon2 != POINT_UNDEFINED && first_lon != POINT_UNDEFINED && 
       last_lon2 != POINT_UNDEFINED && last_lon != POINT_UNDEFINED ) 
@@ -158,7 +157,7 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
 
 void draw_outer_circle(cairo_t *cr)
 {
-  cairo_set_source_rgb (cr, 0, 0, 0);
+  cairo_set_source_rgb (cr, 0, 1, 0);
   cairo_arc (cr, x_center, y_center, radius*scale, 0, 2*M_PI);
   cairo_stroke(cr);
 }
@@ -168,8 +167,6 @@ int main (int argc, char *argv[])
   FILE *input;
   cairo_surface_t *cs;
   cairo_t *cr;
-  /*  int height = 100;
-      int width = 100;*/
   float margin = 5.;
   float dlon, dlat;
   float lon;
@@ -188,14 +185,12 @@ int main (int argc, char *argv[])
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
   for (i = 0; i < nb_lat; ++i) {
-  //for (i = 3; i < 4; ++i) {
-    //for (j = 0; j < 1; ++j) {
     for (j = 0; j < nb_lon; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
   }
 
-  //draw_outer_circle(cr);
+//  draw_outer_circle(cr);
 
   /* Needed for PDF output */
   cairo_show_page(cr);
