@@ -7,12 +7,15 @@
 #include <stdlib.h>
 
 
+#define max(a,b) ((a) > (b)) ? (a) : (b)
+#define min(a,b) ((a) < (b)) ? (a) : (b)
+
 #define PI 3.141592653589793238462643383
 #define ratio PI/180.
 #define POINT_UNDEFINED -99999.
 
 /* Modify these */
-#define lat_0 20*ratio
+#define lat_0 0*ratio
 #define lon_0 0*ratio
 #define nb_lon 20
 #define nb_lat 10
@@ -30,11 +33,10 @@
 int is_visible(float lat, float lon)
 {
   float dist; 
-  float prec = radius/1000.; 
+  float prec = 1e-4; 
   dist = sin(lat_0)*sin(lat*ratio) + cos(lat_0)*cos(lat*ratio)*cos(lon*ratio - lon_0);
 
-  //return (dist > -prec);
-  return (dist > 0);
+  return (dist > -prec);
 }
 
 /* Input in degrees. Assumes the point is visible */
@@ -85,27 +87,33 @@ void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr)
   }
 }
 
-float find_min_visible(float lon1, float lon0, float lat) {
+float find_min_visible(float lon0, float lon1, float lat) {
   float dlon, cur;
+  float first_lon, last_lon;
   int i;
 
-  dlon = (lon1 - lon0) / nb_points;
+  first_lon = min(lon0, lon1);
+  last_lon = max(lon0, lon1);
+  dlon = (last_lon - first_lon) / nb_points;
   for (i = 0; i < nb_points+1; ++i)
   {
-    cur = lon0 + i*dlon;
+    cur = first_lon + i*dlon;
     if (is_visible(lat, cur)) return cur;
   }
 }
 
-float find_max_visible(float lon1, float lon0, float lat) {
+float find_max_visible(float lon0, float lon1, float lat) {
   float dlon, lon;
+  float first_lon, last_lon;
   float cur;
   int i;
 
-  dlon = (lon1 - lon0) / nb_points;
-  for (i = nb_points; i > -1; --i)
+  first_lon = min(lon0, lon1);
+  last_lon = max(lon0, lon1);
+  dlon = (last_lon - first_lon) / nb_points;
+  for (i = 0; i < nb_points+1; ++i)
   {
-    cur = lon1 - i*dlon;
+    cur = last_lon - i*dlon;
     if (is_visible(lat, cur)) return cur;
   }
 }
@@ -116,7 +124,9 @@ void set_to_visible(float* first_lon, float* last_lon, float lat) {
   int x, res;
 
   if (is_visible(lat, *first_lon)) {
-    if (is_visible(lat, *last_lon)) return;
+    if (is_visible(lat, *last_lon)) {
+      return;
+    }
     else {
       //printf("find max %f is visible %d \n", *last_lon, is_visible(*last_lon, lat));
       //printf("lat lon %f %f \n", *last_lon, lat);
@@ -205,14 +215,14 @@ int main (int argc, char *argv[])
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
   for (i = 0; i < nb_lat; ++i) {
- // for (i = 3; i < 4; ++i) {
+//  for (i = 5; i < 6; ++i) {
     for (j = 0; j < nb_lon; ++j) {
-//    for (j = 0; j < 1; ++j) {
+    //for (j = nb_lon-5; j < nb_lon-4; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
   }
 
-  draw_outer_circle(cr);
+//  draw_outer_circle(cr);
 
   /* Needed for PDF output */
   cairo_show_page(cr);
