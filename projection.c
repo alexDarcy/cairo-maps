@@ -15,7 +15,7 @@
 #define POINT_UNDEFINED -99999.
 
 /* Modify these */
-#define lat_0 0*ratio
+#define lat_0 20*ratio
 #define lon_0 0*ratio
 #define nb_lon 20
 #define nb_lat 10
@@ -54,7 +54,7 @@ int map_to_orthographic(float* x, float* y, float lat, float lon)
 }
 
 /* Draw the visible part of an arc */
-void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr) 
+void draw_arc(float start[], float end[], cairo_t* cr) 
 {
   int i;
   int res1, res2;
@@ -62,13 +62,13 @@ void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr)
   float x1, y1;
   float x2, y2;
 
-  dlat = (lat1 - lat0) / nb_points;
-  dlon = (lon1 - lon0) / nb_points;
+  dlat = (end[0] - start[0]) / nb_points;
+  dlon = (end[1] - start[1]) / nb_points;
 //  printf("dlat dlon %f %f \n", dlat, dlon);
   for (i = 0; i < nb_points; ++i)
   {
-    res1 = map_to_orthographic(&x1, &y1, lat0 + i*dlat, lon0 + i*dlon);
-    res2 = map_to_orthographic(&x2, &y2, lat0 + (i+1)*dlat, lon0 + (i+1)*dlon);
+    res1 = map_to_orthographic(&x1, &y1, start[0] + i*dlat, start[1] + i*dlon);
+    res2 = map_to_orthographic(&x2, &y2, start[0] + (i+1)*dlat, start[1] + (i+1)*dlon);
 
     /* No need for that anymore */
     if (res1 > 0 && res2 > 0) {
@@ -87,13 +87,15 @@ void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr)
   }
 }
 
+/* Find first visible point between (lat0, lon0) and (lat1, lon1)
+ * Assume (lat0, lon0) < (lat1, lon1) */
 float find_min_visible(float lon0, float lon1, float lat) {
   float dlon, cur;
   float first_lon, last_lon;
   int i;
 
-  first_lon = min(lon0, lon1);
-  last_lon = max(lon0, lon1);
+  first_lon = lon0;//min(lon0, lon1);
+  last_lon = lon1;//max(lon0, lon1);
   dlon = (last_lon - first_lon) / nb_points;
   for (i = 0; i < nb_points+1; ++i)
   {
@@ -102,44 +104,78 @@ float find_min_visible(float lon0, float lon1, float lat) {
   }
 }
 
-float find_max_visible(float lon0, float lon1, float lat) {
-  float dlon, lon;
-  float first_lon, last_lon;
-  float cur;
+/* Find last visible point on the segment defined by its extremities 
+ * end contains the new value (lat, lon)
+ * Assume (lat0, lon0) < (lat1, lon1) */
+void find_last_visible(float start[], float end[]) {
+  float dlon, dlat;
+  float cur[2];
   int i;
 
-  first_lon = min(lon0, lon1);
-  last_lon = max(lon0, lon1);
-  dlon = (last_lon - first_lon) / nb_points;
+  dlat = (end[0] - start[0]) / nb_points;
+  dlon = (end[1] - start[1]) / nb_points;
   for (i = 0; i < nb_points+1; ++i)
   {
-    cur = last_lon - i*dlon;
-    if (is_visible(lat, cur)) return cur;
+    cur[0] = end[0] - i*dlat;
+    cur[1] = end[1] - i*dlon;
+    if (is_visible(cur[0], cur[1])) {
+      end[0] = cur[0];
+      end[1] = cur[1];
+      return;
+    }
   }
+  return NULL;
 }
 
+/* Find first visible point on the segment defined by its extremities 
+ * end contains the new value (lat, lon)
+ * Assume (lat0, lon0) < (lat1, lon1) */
+void find_first_visible(float* start, float* end) {
+  float dlon, dlat;
+  float cur[2];
+  int i;
+
+  dlat = (end[0] - start[0]) / nb_points;
+  dlon = (end[1] - start[1]) / nb_points;
+  for (i = 0; i < nb_points+1; ++i)
+  {
+    cur[0] = start[0] + i*dlat;
+    cur[1] = start[1] + i*dlon;
+    if (is_visible(cur[0], cur[1])) {
+      start[0] = cur[0];
+      start[1] = cur[1];
+      return;
+    }
+  }
+  return NULL;
+}
+
+
 /* Replace the segment extremities with the visible extremities */
-void set_to_visible(float* first_lon, float* last_lon, float lat) {
+void set_to_visible(float start[], float end[]) {
   float min_lon, max_lon;
   int x, res;
 
-  if (is_visible(lat, *first_lon)) {
-    if (is_visible(lat, *last_lon)) {
+  if (is_visible(start[0], start[1])) {
+    if (is_visible(end[0], end[1])) {
       return;
     }
     else {
-      //printf("find max %f is visible %d \n", *last_lon, is_visible(*last_lon, lat));
-      //printf("lat lon %f %f \n", *last_lon, lat);
-      *last_lon = find_max_visible(*first_lon, *last_lon, lat);
+      find_last_visible(start, end);
     }
   }
   else {
-    if (is_visible(lat, *last_lon)) {
-      *first_lon = find_min_visible(*first_lon, *last_lon, lat);
+    if (is_visible(end[0], end[1])) {
+  //!printf("first not visible for %f %f\n", start[0], start[1]);
+  //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
+      find_first_visible(start, end);
+  //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
     }
     else {
-      *first_lon = POINT_UNDEFINED;
-      *last_lon = POINT_UNDEFINED;
+      start[0] = POINT_UNDEFINED;
+      start[1] = POINT_UNDEFINED;
+      end[0] = POINT_UNDEFINED;
+      end[1] = POINT_UNDEFINED;
       return;
     }
   }
@@ -151,35 +187,42 @@ void set_to_visible(float* first_lon, float* last_lon, float lat) {
 void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   float x1, y1;
   float x2, y2;
-  float first_lon, last_lon;
-  float first_lon2, last_lon2;
-  float r, g, b;
+  float a[2] = {lat, lon};
+  float b[2] = {lat, lon+dlon};
+  float c[2] = {lat-dlat, lon+dlon};
+  float d[2] = {lat-dlat, lon};
+  float r1, g1, b1;
+  int cond;
 
-  first_lon = lon;
-  last_lon = lon+dlon;
-  //printf("before %f %f \n", first_lon, last_lon);
-  set_to_visible(&first_lon, &last_lon, lat);
-  //printf("after %f %f \n", first_lon, last_lon);
+  set_to_visible(a, b);
+  d[1] = a[1];
+  c[1] = b[1];
 
-  first_lon2 = lon;
-  last_lon2 = lon+dlon;
-  set_to_visible(&first_lon2, &last_lon2, lat - dlat);
-
-  /* All the cell must be visible as we corrected the extremities */
-  if (first_lon2 != POINT_UNDEFINED && first_lon != POINT_UNDEFINED && 
-      last_lon2 != POINT_UNDEFINED && last_lon != POINT_UNDEFINED ) 
-  {
+  set_to_visible(a, d);
+  b[0] = a[0];
+  c[0] = d[0];
+  //set_to_visible(b, c);
+  //printf("d before %f %f\n", d[0], d[1]);
+  //set_to_visible(d, c);
+  //printf("d after %f %f\n", d[0], d[1]);
+  //set_to_visible(d, a);
+  cond = a[0] != POINT_UNDEFINED && a[1] != POINT_UNDEFINED;
+  cond = cond && (b[0] != POINT_UNDEFINED && b[1] != POINT_UNDEFINED);
+  cond = cond && (c[0] != POINT_UNDEFINED && c[1] != POINT_UNDEFINED);
+  cond = cond && (d[0] != POINT_UNDEFINED && d[1] != POINT_UNDEFINED);
+ /* All the cell must be visible as we corrected the extremities */
+ if (cond) {
     cairo_set_source_rgb(cr, 0., 0., 0.);
-    draw_arc(lat, first_lon, lat, last_lon, cr);
-    draw_arc(lat, last_lon, lat - dlat, last_lon2, cr);
-    draw_arc(lat - dlat, last_lon2, lat - dlat, first_lon2, cr);
-    draw_arc(lat - dlat, first_lon2, lat, first_lon, cr);
+    draw_arc(a, b, cr);
+    draw_arc(b, c, cr);
+    draw_arc(c, d, cr);
+    draw_arc(d, a, cr);
     if (fill_cell) {
       cairo_close_path(cr);
-      r = (float)rand()/(float)RAND_MAX;
-      g = (float)rand()/(float)RAND_MAX;
-      b = (float)rand()/(float)RAND_MAX;
-      cairo_set_source_rgb(cr, r, g, b);
+      r1 = (float)rand()/(float)RAND_MAX;
+      g1 = (float)rand()/(float)RAND_MAX;
+      b1 = (float)rand()/(float)RAND_MAX;
+      cairo_set_source_rgb(cr, r1, g1, b1);
       cairo_fill(cr);
     }
   }
@@ -217,12 +260,12 @@ int main (int argc, char *argv[])
   for (i = 0; i < nb_lat; ++i) {
 //  for (i = 5; i < 6; ++i) {
     for (j = 0; j < nb_lon; ++j) {
-    //for (j = nb_lon-5; j < nb_lon-4; ++j) {
+ //   for (j = nb_lon-5; j < nb_lon-4; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
   }
 
-//  draw_outer_circle(cr);
+  //draw_outer_circle(cr);
 
   /* Needed for PDF output */
   cairo_show_page(cr);
