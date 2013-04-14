@@ -12,7 +12,7 @@
 #define POINT_UNDEFINED -99999.
 
 /* Modify these */
-#define lat_0 10*ratio
+#define lat_0 20*ratio
 #define lon_0 0*ratio
 #define nb_lon 20
 #define nb_lat 10
@@ -27,19 +27,23 @@
 
 #define fill_cell 0
 
-/* Input in degrees */
+int is_visible(float lat, float lon)
+{
+  float dist; 
+  float prec = radius/1000.; 
+  dist = sin(lat_0)*sin(lat*ratio) + cos(lat_0)*cos(lat*ratio)*cos(lon*ratio - lon_0);
+
+  //return (dist > -prec);
+  return (dist > 0);
+}
+
+/* Input in degrees. Assumes the point is visible */
 int map_to_orthographic(float* x, float* y, float lat, float lon)
 {
   float lat1 = lat*ratio;
   float lon1 = lon*ratio;
   float dist;
-  float prec = radius/1000.; 
-  dist = sin(lat_0)*sin(lat1) + cos(lat_0)*cos(lat1)*cos(lon1 - lon_0);
-
-  /* Only print negative distance, with a precision */
-  /* No longer need to check that */
-//  if (dist < prec) return -1;
-
+  
   (*x) = radius*cos(lat1)*sin(lon1 - lon_0);
   (*y) = cos(lat_0)*sin(lat1) - sin(lat_0)*cos(lat1)*cos(lon1 - lon_0);
   (*y) *= radius;
@@ -81,39 +85,55 @@ void draw_arc(float lat0, float lon0, float lat1, float lon1, cairo_t* cr)
   }
 }
 
-/* Output in degree */
-void visible_lon_extrema(float* maxlon1, float* maxlon2, float lat)
-{
-  /* Lat is in degree */
-  *maxlon1 = -sin(lat_0)*sin(lat*ratio)/(cos(lat_0)*cos(lat*ratio));
-  *maxlon1 = (acos(*maxlon1) + lon_0)*180./PI;
-  *maxlon2 = 360 - *maxlon1 + lon_0*180./PI;
+float find_min_visible(float lon1, float lon0, float lat) {
+  float dlon, cur;
+  int i;
 
+  dlon = (lon1 - lon0) / nb_points;
+  for (i = 0; i < nb_points+1; ++i)
+  {
+    cur = lon0 + i*dlon;
+    if (is_visible(lat, cur)) return cur;
+  }
 }
 
-void adapt_lon(float* first_lon, float* last_lon, float lat) {
-  float min_lon, max_lon;
-  int x;
+float find_max_visible(float lon1, float lon0, float lat) {
+  float dlon, lon;
+  float cur;
+  int i;
 
-  
-  visible_lon_extrema(&min_lon, &max_lon, lat);
-  //printf("visible extr %f %f %f \n", max_lon1, max_lon2, lat);
- 
-  /* Last point inside invisible zone */
-  if (*last_lon > min_lon && *last_lon < max_lon ){
-    /* All of the arc is invisible */
-    if (*first_lon > min_lon && *first_lon < max_lon ){
+  dlon = (lon1 - lon0) / nb_points;
+  for (i = nb_points; i > -1; --i)
+  {
+    cur = lon1 - i*dlon;
+    if (is_visible(lat, cur)) return cur;
+  }
+}
+
+/* Replace the segment extremities with the visible extremities */
+void set_to_visible(float* first_lon, float* last_lon, float lat) {
+  float min_lon, max_lon;
+  int x, res;
+
+  if (is_visible(lat, *first_lon)) {
+    if (is_visible(lat, *last_lon)) return;
+    else {
+      //printf("find max %f is visible %d \n", *last_lon, is_visible(*last_lon, lat));
+      //printf("lat lon %f %f \n", *last_lon, lat);
+      *last_lon = find_max_visible(*first_lon, *last_lon, lat);
+    }
+  }
+  else {
+    if (is_visible(lat, *last_lon)) {
+      *first_lon = find_min_visible(*first_lon, *last_lon, lat);
+    }
+    else {
       *first_lon = POINT_UNDEFINED;
       *last_lon = POINT_UNDEFINED;
       return;
     }
-    /* Otherwise, only the end */
-    *last_lon = min_lon;
   }
-  /* First point inside invisible zone : last must be outside here*/
-  else if (*first_lon > min_lon && *first_lon < max_lon ){
-    *first_lon = max_lon;
-  }
+
 }
 
 /* (lat, lon) is upper left corner and in degree */
@@ -127,15 +147,15 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
 
   first_lon = lon;
   last_lon = lon+dlon;
-  adapt_lon(&first_lon, &last_lon, lat);
+  //printf("before %f %f \n", first_lon, last_lon);
+  set_to_visible(&first_lon, &last_lon, lat);
+  //printf("after %f %f \n", first_lon, last_lon);
 
   first_lon2 = lon;
   last_lon2 = lon+dlon;
-  adapt_lon(&first_lon2, &last_lon2, lat - dlat);
-  /*printf("lat %f %f %f \n", lat, lon, lon+dlon);
-  printf("extr %f %f %f %f \n", first_lon, last_lon, first_lon2, last_lon2);
-  */
+  set_to_visible(&first_lon2, &last_lon2, lat - dlat);
 
+  /* All the cell must be visible as we corrected the extremities */
   if (first_lon2 != POINT_UNDEFINED && first_lon != POINT_UNDEFINED && 
       last_lon2 != POINT_UNDEFINED && last_lon != POINT_UNDEFINED ) 
   {
@@ -185,12 +205,14 @@ int main (int argc, char *argv[])
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
   for (i = 0; i < nb_lat; ++i) {
+ // for (i = 3; i < 4; ++i) {
     for (j = 0; j < nb_lon; ++j) {
+//    for (j = 0; j < 1; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
   }
 
-//  draw_outer_circle(cr);
+  draw_outer_circle(cr);
 
   /* Needed for PDF output */
   cairo_show_page(cr);
