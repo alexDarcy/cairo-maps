@@ -15,7 +15,7 @@
 #define POINT_UNDEFINED -99999.
 
 /* Modify these */
-#define lat_0 20*ratio
+#define lat_0 60*ratio
 #define lon_0 0*ratio
 #define nb_lon 20
 #define nb_lat 10
@@ -28,7 +28,7 @@
 #define nb_points 20
 #define scale 20.
 
-#define fill_cell 0
+#define fill_cell 1
 
 int is_visible(float lat, float lon)
 {
@@ -254,7 +254,7 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   for (i = 0; i < 4; ++i) {
     if (res[i] > -1) count++;
   }
-  canDraw = count > 1;
+  canDraw = count > 2;
 
   /* All the cell must be visible as we corrected the extremities */
   if (canDraw) {
@@ -313,11 +313,9 @@ int main (int argc, char *argv[])
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
    for (i = 0; i < nb_lat; ++i) {
-  //    for (j = 0; j < nb_lon; ++j) {
-  //for (i = 3; i < 4; ++i) {
-//    for (j = nb_lon-6; j < nb_lon-5; ++j) {
       for (j = 0; j < nb_lon; ++j) {
-      //    for (j = 5; j < 6; ++j) {
+  //for (i = 2; i < 3; ++i) {
+   //       for (j = 6; j < 7; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
     }
