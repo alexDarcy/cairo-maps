@@ -44,7 +44,6 @@ int map_to_orthographic(float* x, float* y, float lat, float lon)
 {
   float lat1 = lat*ratio;
   float lon1 = lon*ratio;
-  float dist;
   
   (*x) = radius*cos(lat1)*sin(lon1 - lon_0);
   (*y) = cos(lat_0)*sin(lat1) - sin(lat_0)*cos(lat1)*cos(lon1 - lon_0);
@@ -102,6 +101,7 @@ float find_min_visible(float lon0, float lon1, float lat) {
     cur = first_lon + i*dlon;
     if (is_visible(lat, cur)) return cur;
   }
+  return 0.;
 }
 
 /* Find last visible point on the segment defined by its extremities 
@@ -124,7 +124,6 @@ void find_last_visible(float start[], float end[]) {
       return;
     }
   }
-  return NULL;
 }
 
 /* Find first visible point on the segment defined by its extremities 
@@ -151,35 +150,41 @@ void find_first_visible(float* start, float* end) {
 }
 
 
-/* Replace the segment extremities with the visible extremities */
-void set_to_visible(float start[], float end[]) {
+/* Replace the segment extremities with the visible extremities
+ * Returns 1 if we modified the segment, -1 if the segment is invisible,
+ * 0 otherwise */
+int set_to_visible(float start[], float end[]) {
   float min_lon, max_lon;
   int x, res;
 
   if (is_visible(start[0], start[1])) {
     if (is_visible(end[0], end[1])) {
-      return;
+      return 0;
     }
     else {
+      //printf("last not\n");
       find_last_visible(start, end);
+      return 1;
     }
   }
   else {
     if (is_visible(end[0], end[1])) {
   //!printf("first not visible for %f %f\n", start[0], start[1]);
   //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
+      //printf("first not\n");
       find_first_visible(start, end);
+      return 1;
   //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
     }
     else {
+      //printf("all invisible\n");
       start[0] = POINT_UNDEFINED;
       start[1] = POINT_UNDEFINED;
       end[0] = POINT_UNDEFINED;
       end[1] = POINT_UNDEFINED;
-      return;
+      return -1;
     }
   }
-
 }
 
 /* (lat, lon) is upper left corner and in degree */
@@ -191,19 +196,38 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   float b[2] = {lat, lon+dlon};
   float c[2] = {lat-dlat, lon+dlon};
   float d[2] = {lat-dlat, lon};
+  float a_tmp[2];
+  float b_tmp[2], c_tmp[2], d_tmp[2];
   float r1, g1, b1;
-  int cond;
+  int cond, i;
+  int res[4];
 
-  set_to_visible(a, b);
-  d[1] = a[1];
-  c[1] = b[1];
+  for (i = 0; i < 2; ++i) {
+    a_tmp[i] = a[i];
+    b_tmp[i] = b[i];
+    c_tmp[i] = c[i];
+    d_tmp[i] = d[i];
+  }
+  res[0] = set_to_visible(a, b);
+  res[2] = set_to_visible(d_tmp, c_tmp);
+  /* DC is invisible so we adjust AD and BC */
+  if ( res[2] == -1 ) {
+    res[1] = set_to_visible(b, c);
+    res[3] = set_to_visible(a, d);
+  }
+  else {
+    for (i = 0; i < 2; ++i) {
+      c[i] = c_tmp[i];
+      d[i] = d_tmp[i];
+    }
+  }
+  //printf("ab %d \n",set_to_visible(a, b));
+  //printf("ad %d \n", set_to_visible(a, d));
+  //printf("bc %d \n", set_to_visible(b, c));
+  //printf("dc %d \n", set_to_visible(d, c));
+  //}
 
-  set_to_visible(a, d);
-  b[0] = a[0];
-  c[0] = d[0];
-  //set_to_visible(b, c);
   //printf("d before %f %f\n", d[0], d[1]);
-  //set_to_visible(d, c);
   //printf("d after %f %f\n", d[0], d[1]);
   //set_to_visible(d, a);
   cond = a[0] != POINT_UNDEFINED && a[1] != POINT_UNDEFINED;
@@ -211,6 +235,7 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   cond = cond && (c[0] != POINT_UNDEFINED && c[1] != POINT_UNDEFINED);
   cond = cond && (d[0] != POINT_UNDEFINED && d[1] != POINT_UNDEFINED);
  /* All the cell must be visible as we corrected the extremities */
+ //if (res[0] != -1 && res[1] != -1 && res[2] != -1 && res[3] != -1) {
  if (cond) {
     cairo_set_source_rgb(cr, 0., 0., 0.);
     draw_arc(a, b, cr);
@@ -258,9 +283,9 @@ int main (int argc, char *argv[])
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
   for (i = 0; i < nb_lat; ++i) {
-//  for (i = 5; i < 6; ++i) {
     for (j = 0; j < nb_lon; ++j) {
- //   for (j = nb_lon-5; j < nb_lon-4; ++j) {
+//  for (i = 8; i < 9; ++i) {
+//    for (j = 0; j < 1; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
   }
