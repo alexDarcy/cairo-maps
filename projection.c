@@ -15,8 +15,8 @@
 #define POINT_UNDEFINED -99999.
 
 /* Modify these */
-#define lat_0 80*ratio
-#define lon_0 0*ratio
+#define lat_0 70*ratio
+#define lon_0 8*ratio
 #define nb_lon 20
 #define nb_lat 10
 
