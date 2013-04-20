@@ -15,7 +15,7 @@
 #define POINT_UNDEFINED -99999.
 
 /* Modify these */
-#define lat_0 60*ratio
+#define lat_0 80*ratio
 #define lon_0 0*ratio
 #define nb_lon 20
 #define nb_lat 10
@@ -151,7 +151,7 @@ void find_first_visible(float start[], float end[], float start_n[]) {
 /* We have all the sides of the cells, twice. We remove the invisible parts
  * according to an array 
  * The result is in a_new */
-void generate_cell(float a_new[], float a_new2[], float b_new[], 
+void correct_cell(float a_new[], float a_new2[], float b_new[], 
     float b_new2[], float c_new[], float c_new2[], float d_new[], 
     float d_new2[], int res[]){
   int i;
@@ -162,16 +162,24 @@ void generate_cell(float a_new[], float a_new2[], float b_new[],
       b_new[i] = b_new2[i];
     }
   }
-  /* Do nothing 
-     else if (res[1] == -1) { */
-  else if (res[2] == -1) {
+  if (res[1] == -1) { 
+    for (i = 0; i < 2; ++i) {
+      b_new2[i] = b_new[i];
+      c_new2[i] = c_new[i];
+    }
+  }
+  if (res[2] == -1) {
     for (i = 0; i < 2; ++i) {
       c_new[i] = c_new2[i];
       d_new[i] = d_new2[i];
     }
   }
-/* Do nothing 
- * else  */
+  if (res[3] == -1) {
+    for (i = 0; i < 2; ++i) {
+      d_new2[i] = d_new[i];
+      a_new2[i] = a_new[i];
+    }
+  }
 }
 
 
@@ -206,9 +214,9 @@ int set_to_visible(float start[], float end[], float start_n[], float end_n[]) {
       //!printf("first not visible for %f %f\n", start[0], start[1]);
       //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
       find_first_visible(start, end, start_n);
-//      printf("first not\n");
-//      printf("start %f %f\n", start[0], start[1]);
-//      printf("start_new %f %f\n", start_n[0], start_n[1]);
+      //      printf("first not\n");
+      //      printf("start %f %f\n", start[0], start[1]);
+      //      printf("start_new %f %f\n", start_n[0], start_n[1]);
       return 1;
       //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
     }
@@ -242,14 +250,11 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   res[0] = set_to_visible(a, b, a_new, b_new);
   res[1] = set_to_visible(b, c, b_new2, c_new2);
   res[2] = set_to_visible(c, d, c_new, d_new);
-  //  for (i = 0; i < 2; ++i) 
-  //     printf("cd %f %f\n", c[i], d[i]);
-  //  for (i = 0; i < 2; ++i) 
-  //     printf("cnew dnew %f %f\n", c_new[i], d_new[i]);
+  //    for (i = 0; i < 2; ++i) 
+  //       printf("cd %f %f\n", c[i], d[i]);
 
   res[3] = set_to_visible(d, a, d_new2, a_new2);
   //printf("res %d %d %d %d \n", res[0], res[1], res[2], res[3]);
-  //canDraw = res[0] != -1 && res[1] != -1  && res[2] != -1 && res[3] != -1;
   count = 0;
   for (i = 0; i < 4; ++i) {
     if (res[i] > -1) count++;
@@ -258,20 +263,18 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
 
   /* All the cell must be visible as we corrected the extremities */
   if (canDraw) {
-    generate_cell(a_new, a_new2, b_new, b_new2, c_new, c_new2, d_new, d_new2, res);
-    /* for (i = 0; i < 2; ++i) 
-       printf("ab %f %f\n", a_new[i], b_new[i]);
-       for (i = 0; i < 2; ++i) 
-       printf("bc %f %f\n", b_new[i], c_new[i]);
-       for (i = 0; i < 2; ++i) 
-       printf("cd %f %f\n", c_new[i], d_new[i]);
-       */
-
+    correct_cell(a_new, a_new2, b_new, b_new2, c_new, c_new2, d_new, d_new2, res);
     cairo_set_source_rgb(cr, 0., 0., 0.);
+
+    /* We do not draw a rectangular cell but a polygon to account for borders 
+    * So we may draw "empty" lines */
     draw_arc(a_new, b_new, cr);
-    draw_arc(b_new, c_new, cr);
+    draw_arc(b_new, b_new2, cr);
+    draw_arc(b_new2, c_new2, cr);
+    draw_arc(c_new2, c_new, cr);
     draw_arc(c_new, d_new, cr);
-    draw_arc(d_new, a_new, cr);
+    draw_arc(d_new, d_new2, cr);
+    draw_arc(d_new2, a_new2, cr);
     if (fill_cell) {
       cairo_close_path(cr);
       r1 = (float)rand()/(float)RAND_MAX;
@@ -312,10 +315,11 @@ int main (int argc, char *argv[])
 
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
-   for (i = 0; i < nb_lat; ++i) {
+    for (i = 0; i < nb_lat; ++i) {
       for (j = 0; j < nb_lon; ++j) {
-  //for (i = 2; i < 3; ++i) {
-   //       for (j = 6; j < 7; ++j) {
+//  for (i = 4; i < 5; ++i) {
+//    for (j = 5; j < 6; ++j) {
+      //    for (j = 0; j < nb_lon; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
     }
