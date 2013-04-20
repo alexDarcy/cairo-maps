@@ -105,9 +105,9 @@ float find_min_visible(float lon0, float lon1, float lat) {
 }
 
 /* Find last visible point on the segment defined by its extremities 
- * end contains the new value (lat, lon)
+ * end_n contains the new value (lat, lon)
  * Assume (lat0, lon0) < (lat1, lon1) */
-void find_last_visible(float start[], float end[]) {
+void find_last_visible(float start[], float end[], float end_n[]) {
   float dlon, dlat;
   float cur[2];
   int i;
@@ -119,8 +119,8 @@ void find_last_visible(float start[], float end[]) {
     cur[0] = end[0] - i*dlat;
     cur[1] = end[1] - i*dlon;
     if (is_visible(cur[0], cur[1])) {
-      end[0] = cur[0];
-      end[1] = cur[1];
+      end_n[0] = cur[0];
+      end_n[1] = cur[1];
       return;
     }
   }
@@ -129,7 +129,7 @@ void find_last_visible(float start[], float end[]) {
 /* Find first visible point on the segment defined by its extremities 
  * end contains the new value (lat, lon)
  * Assume (lat0, lon0) < (lat1, lon1) */
-void find_first_visible(float* start, float* end) {
+void find_first_visible(float start[], float end[], float start_n[]) {
   float dlon, dlat;
   float cur[2];
   int i;
@@ -141,21 +141,28 @@ void find_first_visible(float* start, float* end) {
     cur[0] = start[0] + i*dlat;
     cur[1] = start[1] + i*dlon;
     if (is_visible(cur[0], cur[1])) {
-      start[0] = cur[0];
-      start[1] = cur[1];
+      start_n[0] = cur[0];
+      start_n[1] = cur[1];
       return;
     }
   }
-  return NULL;
 }
 
 
 /* Replace the segment extremities with the visible extremities
+ * start_n, end_n contains the new segment
  * Returns 1 if we modified the segment, -1 if the segment is invisible,
  * 0 otherwise */
-int set_to_visible(float start[], float end[]) {
+int set_to_visible(float start[], float end[], float start_n[], float end_n[]) {
   float min_lon, max_lon;
   int x, res;
+  int i;
+
+  /* Default is equal */
+  for (i = 0; i < 2; i++) {
+    start_n[i] = start[i];
+    end_n[i] = end[i];
+  }
 
   if (is_visible(start[0], start[1])) {
     if (is_visible(end[0], end[1])) {
@@ -163,7 +170,7 @@ int set_to_visible(float start[], float end[]) {
     }
     else {
       //printf("last not\n");
-      find_last_visible(start, end);
+      find_last_visible(start, end, end_n);
       return 1;
     }
   }
@@ -172,16 +179,16 @@ int set_to_visible(float start[], float end[]) {
   //!printf("first not visible for %f %f\n", start[0], start[1]);
   //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
       //printf("first not\n");
-      find_first_visible(start, end);
+      find_first_visible(start, end, start_n);
       return 1;
   //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
     }
     else {
       //printf("all invisible\n");
-      start[0] = POINT_UNDEFINED;
-      start[1] = POINT_UNDEFINED;
-      end[0] = POINT_UNDEFINED;
-      end[1] = POINT_UNDEFINED;
+      start_n[0] = POINT_UNDEFINED;
+      start_n[1] = POINT_UNDEFINED;
+      end_n[0] = POINT_UNDEFINED;
+      end_n[1] = POINT_UNDEFINED;
       return -1;
     }
   }
@@ -196,52 +203,90 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   float b[2] = {lat, lon+dlon};
   float c[2] = {lat-dlat, lon+dlon};
   float d[2] = {lat-dlat, lon};
-  float a_tmp[2];
-  float b_tmp[2], c_tmp[2], d_tmp[2];
+  float a_new[2];
+  float b_new[2], c_new[2], d_new[2];
   float r1, g1, b1;
   int cond, i;
   int res[4];
+  int canDraw;
 
-  for (i = 0; i < 2; ++i) {
-    a_tmp[i] = a[i];
-    b_tmp[i] = b[i];
-    c_tmp[i] = c[i];
-    d_tmp[i] = d[i];
-  }
-  res[0] = set_to_visible(a, b);
-  res[2] = set_to_visible(d_tmp, c_tmp);
-  /* DC is invisible so we adjust AD and BC */
-  if ( res[2] == -1 ) {
-    res[1] = set_to_visible(b, c);
-    res[3] = set_to_visible(a, d);
-  }
-  else {
-    for (i = 0; i < 2; ++i) {
-      c[i] = c_tmp[i];
-      d[i] = d_tmp[i];
-    }
-  }
-  //printf("ab %d \n",set_to_visible(a, b));
-  //printf("ad %d \n", set_to_visible(a, d));
-  //printf("bc %d \n", set_to_visible(b, c));
-  //printf("dc %d \n", set_to_visible(d, c));
+  res[0] = set_to_visible(a, b, a_new, b_new);
+  res[1] = set_to_visible(b, c, b_new, c_new);
+  res[2] = set_to_visible(c, d, c_new, d_new);
+  res[3] = set_to_visible(d, a, d_new, a_new);
+  canDraw = res[0] != -1 && res[1] != -1  && res[2] != -1 && res[3] != -1;
+  //res[0] = set_to_visible(a_tmp, b_tmp);
+  //res[2] = set_to_visible(d_tmp, c_tmp);
+
+  ///* If opposite sides are invisible, don't draw anything */
+  //if (res[0] == -1 && res[2] == -1) {
+  //  canDraw = 0;
   //}
+  ///* Otherwise, we adjust the border */
+  //else {
+  //  canDraw = 1;
+  //  for (i = 0; i < 2; ++i) {
+  //    a_tmp[i] = a[i];
+  //    b_tmp[i] = b[i];
+  //    c_tmp[i] = c[i];
+  //    d_tmp[i] = d[i];
+  //  }
+  //  res[1] = get_to_visible(b_tmp, c_tmp);
+  //  res[3] = set_to_visible(a_tmp, d_tmp);
+  //  if (res[0] != -1)
+  //    printf("ab %d \n",set_to_visible(a, b));
+  //  if (res[1] != -1) {
+  //    printf("bc %d \n",set_to_visible(b, c));
+  //  }
+  //  if (res[2] != -1)
+  //    printf("cd %d \n",set_to_visible(c, d));
+  //  if (res[3] != -1)
+  //    printf("da %d \n",set_to_visible(d, a));
 
-  //printf("d before %f %f\n", d[0], d[1]);
-  //printf("d after %f %f\n", d[0], d[1]);
-  //set_to_visible(d, a);
-  cond = a[0] != POINT_UNDEFINED && a[1] != POINT_UNDEFINED;
-  cond = cond && (b[0] != POINT_UNDEFINED && b[1] != POINT_UNDEFINED);
-  cond = cond && (c[0] != POINT_UNDEFINED && c[1] != POINT_UNDEFINED);
-  cond = cond && (d[0] != POINT_UNDEFINED && d[1] != POINT_UNDEFINED);
+//    printf("res ");
+//    for (i = 0; i < 4; ++i) 
+//    printf("%d ", res[i]);
+//    printf("\n");
+//
+//
+//    /* West/east border */
+//    if (res[0] == 1 && res[2] == 1) {
+//      set_to_visible(a, b);
+//      set_to_visible(d, c);
+//      printf("west east\n");
+//    }
+//      /* East south corner */
+//    else if (res[0] == 1 && res[1] == -1) {
+//      set_to_visible(a, b);
+//      set_to_visible(a, d);
+//      set_to_visible(d, c);
+//      printf("east south\n");
+//    }
+//      /* West south corner */
+//    else if (res[0] == 1 && res[3] == -1) {
+//      set_to_visible(a, b);
+//      set_to_visible(b, c);
+//      set_to_visible(d, c);
+//      printf("west south\n");
+//    }
+//    /* North/south border */
+//    else {
+//      printf("north/south\n");
+//      set_to_visible(a, d);
+//      set_to_visible(b, c);
+//    }
+//  }
+  //cond = a[0] != POINT_UNDEFINED && a[1] != POINT_UNDEFINED;
+  //cond = cond && (b[0] != POINT_UNDEFINED && b[1] != POINT_UNDEFINED);
+  //cond = cond && (c[0] != POINT_UNDEFINED && c[1] != POINT_UNDEFINED);
+  //cond = cond && (d[0] != POINT_UNDEFINED && d[1] != POINT_UNDEFINED);
  /* All the cell must be visible as we corrected the extremities */
- //if (res[0] != -1 && res[1] != -1 && res[2] != -1 && res[3] != -1) {
- if (cond) {
+ if (canDraw) {
     cairo_set_source_rgb(cr, 0., 0., 0.);
-    draw_arc(a, b, cr);
-    draw_arc(b, c, cr);
-    draw_arc(c, d, cr);
-    draw_arc(d, a, cr);
+    draw_arc(a_new, b_new, cr);
+    draw_arc(b_new, c_new, cr);
+    draw_arc(c_new, d_new, cr);
+    draw_arc(d_new, a_new, cr);
     if (fill_cell) {
       cairo_close_path(cr);
       r1 = (float)rand()/(float)RAND_MAX;
@@ -282,15 +327,16 @@ int main (int argc, char *argv[])
 
   dlon = 360./nb_lon;
   dlat = 180./nb_lat;
-  for (i = 0; i < nb_lat; ++i) {
+ for (i = 0; i < nb_lat; ++i) {
     for (j = 0; j < nb_lon; ++j) {
-//  for (i = 8; i < 9; ++i) {
-//    for (j = 0; j < 1; ++j) {
+//  for (i = 5; i < 6; ++i) {
+    //for (j = 0; j < 4; ++j) {
+ //   for (j = 4; j < 5; ++j) {
       draw_cell(90.-i*dlat, j*dlon, dlat, dlon, cr);
     }
   }
 
-  //draw_outer_circle(cr);
+  draw_outer_circle(cr);
 
   /* Needed for PDF output */
   cairo_show_page(cr);
