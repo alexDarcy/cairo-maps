@@ -14,12 +14,6 @@
 #define ratio PI/180.
 #define POINT_UNDEFINED -99999.
 
-/* Modify these */
-#define lat_0 70*ratio
-#define lon_0 8*ratio
-#define nb_lon 20
-#define nb_lat 10
-
 #define radius 10
 #define width 500
 #define height 500
@@ -28,7 +22,16 @@
 #define nb_points 20
 #define scale 20.
 
+/* Troubles with PNG output : not the same colors each time */
+//#define IS_PNG
+
 #define fill_cell 1
+
+/* Modify these */
+float lat_0;
+float lon_0;
+int nb_lon = 20;
+int nb_lat = 10;
 
 int is_visible(float lat, float lon)
 {
@@ -189,8 +192,6 @@ void correct_cell(float a_new[], float a_new2[], float b_new[],
  * Returns 1 if we modified the segment, -1 if the segment is invisible,
  * 0 otherwise */
 int set_to_visible(float start[], float end[], float start_n[], float end_n[]) {
-  float min_lon, max_lon;
-  int x, res;
   int i;
 
   /* Default is equal */
@@ -211,17 +212,10 @@ int set_to_visible(float start[], float end[], float start_n[], float end_n[]) {
   }
   else {
     if (is_visible(end[0], end[1])) {
-      //!printf("first not visible for %f %f\n", start[0], start[1]);
-      //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
       find_first_visible(start, end, start_n);
-      //      printf("first not\n");
-      //      printf("start %f %f\n", start[0], start[1]);
-      //      printf("start_new %f %f\n", start_n[0], start_n[1]);
       return 1;
-      //printf("start end %f %f %f %f\n", start[0], start[1], end[0], end[1]);
     }
     else {
-      //printf("all invisible\n");
       /*start_n[0] = POINT_UNDEFINED;
         start_n[1] = POINT_UNDEFINED;
         end_n[0] = POINT_UNDEFINED;
@@ -234,8 +228,6 @@ int set_to_visible(float start[], float end[], float start_n[], float end_n[]) {
 /* (lat, lon) is upper left corner and in degree */
 /* dlat > 0 */
 void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
-  float x1, y1;
-  float x2, y2;
   float a[2] = {lat, lon};
   float b[2] = {lat, lon+dlon};
   float c[2] = {lat-dlat, lon+dlon};
@@ -243,7 +235,7 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
   float a_new[2], b_new[2], c_new[2], d_new[2];
   float a_new2[2], b_new2[2], c_new2[2], d_new2[2];
   float r1, g1, b1;
-  int cond, i;
+  int i;
   int res[4];
   int canDraw, count;
 
@@ -302,12 +294,38 @@ int main (int argc, char *argv[])
   float dlon, dlat;
   float lon;
   int i, j;
+  char* fname;
 
-  srand(time(NULL));
+  if ( argc == 4 ) {
+    lat_0 = atof(argv[1])*ratio;
+    lon_0 = atof(argv[2])*ratio;
+    fname = argv[3];
+  }
+  else {
+    printf("Warning : you did not specify all parameters, defaulting\n");
+    printf("Usage : %s lat_0 lon_0 (in degree) output \n", argv[0]);
+    lat_0 = 10*ratio;
+    lon_0 = 0*ratio;
+#ifdef IS_PNG
+    fname = "test.png";
+#else
+    fname = "test.pdf";
+#endif
+  }
+  printf("lat_0=%f lon_0=%f\n", lat_0, lon_0);
+  printf("output %s\n", fname);
+
+  /* We want the same seed */
+  srand(1);
 
   /* Create a surface and a cairo_t */
   /* A4 format approx */
-  cs = cairo_pdf_surface_create("test.pdf", width, height);
+#ifdef IS_PNG
+  cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+#else
+  cs = cairo_pdf_surface_create(fname, width, height);
+#endif
+  
   cr = cairo_create (cs);
   cairo_set_source_rgb(cr,0,0,0);
   cairo_set_line_width(cr,0.5);
@@ -327,10 +345,16 @@ int main (int argc, char *argv[])
     draw_outer_circle(cr);
 
     /* Needed for PDF output */
+#ifdef IS_PNG
+    cairo_surface_write_to_png(cs, fname);
+#else
     cairo_show_page(cr);
+#endif
     cairo_destroy(cr);
 
+#ifndef IS_PNG
     cairo_surface_flush(cs);
+#endif
     cairo_surface_destroy(cs);
 
     return 0;
