@@ -22,8 +22,7 @@
 #define nb_points 20
 #define scale 20.
 
-/* Troubles with PNG output : not the same colors each time */
-//#define IS_PNG
+#define IS_PNG
 
 #define fill_cell 1
 
@@ -269,9 +268,14 @@ void draw_cell(float lat, float lon, float dlat, float dlon, cairo_t *cr){
     draw_arc(d_new2, a_new2, cr);
     if (fill_cell) {
       cairo_close_path(cr);
-      r1 = (float)rand()/(float)RAND_MAX;
+      r1 = 0.5*(lon / 360. + abs(lat)/90.);
+      g1 = 0.5*(lon / 360. + abs(lat)/90.);
+      b1 = 0.5*(lon / 360. + abs(lat)/90.);
+      /* Issue when moving */
+      /*r1 = (float)rand()/(float)RAND_MAX;
       g1 = (float)rand()/(float)RAND_MAX;
-      b1 = (float)rand()/(float)RAND_MAX;
+      b1 = (float)rand()/(float)RAND_MAX;*/
+
       cairo_set_source_rgb(cr, r1, g1, b1);
       cairo_fill(cr);
     }
