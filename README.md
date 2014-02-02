@@ -1,7 +1,10 @@
-Projection
+Cairo-maps
 ==========
 
-Plot an orthographic projection of a regular latitude-longitude grid with the
+At the moment, only orthographic projection is available.
+
+## Orthographic projection
+Plots an orthographic projection of a regular latitude-longitude grid with the
 Cairo library.
 
 A first approach is to draw a cell line by line and remove the part of the line
